@@ -9,8 +9,8 @@ rc('text', usetex=True)
 
 it = 6
 iterationTime = []
-P = 10
-print "Number of points used: ", P
+P = 40
+print("Number of points used: ", P)
 # =========================================================
 # Plot closed-loop
 # =========================================================
@@ -23,7 +23,7 @@ plt.figure()
 plt.plot(xFeasible[0,:], xFeasible[1,:], '-d', color=colorMap[2], label='Feasible trajectory')
 iterationTime.append(xFeasible.shape[1]-1) # Store time to reach xf
 
-print xFeasible
+print(xFeasible)
 
 xit = []
 for i in range(1,it):
@@ -42,7 +42,7 @@ xit.append(copy.copy(xcl))
 plt.plot(xcl[0,:], xcl[1,:], 's', color=colorMap[3]) # Store time to reach xf
 plt.plot(xcl[0,:], xcl[1,:], '-o', color=colorMap[0], label='LMPC closed-loop at '+str(it)+'th iteration')
 
-print iterationTime
+print(iterationTime)
 
 x_obs = []
 y_obs = []
@@ -133,7 +133,9 @@ plt.legend()
 # =========================================================
 # Run Comparison
 # =========================================================
-input = raw_input("Do you want to run comparison for different values of P and l? [y/n] ")
+# input = input("Do you want to run comparison for different values of P and l? [y/n] ")
+print("Skipping comparison for different values of P and l")
+input = 'n'
 
 # =========================================================
 # Plot inputs

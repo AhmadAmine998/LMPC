@@ -25,7 +25,7 @@ def main():
 
 	# Compute feasible trajectory
 	xclFeasible, uclFeasible = feasTraj(ftocp, 40, np.pi/6*2)
-	print np.round(xclFeasible, decimals=2)
+	print(np.round(xclFeasible, decimals=2))
 	np.savetxt('storedData/closedLoopFeasible.txt',xclFeasible, fmt='%f' )
 
 	# Initialize LMPC object
@@ -61,11 +61,11 @@ def main():
 			ucl.append(copy.copy(ut))
 			xcl.append(copy.copy(ftocp.f(xcl[timeStep], ut)))
 
-			# Print results
-			print "State trajectory at time ", timeStep
-			print np.round(np.array(xcl).T, decimals=2)
-			print np.round(np.array(ucl).T, decimals=2)
-			print "==============================================="
+			# print results
+			print("State trajectory at time ", timeStep)
+			print(np.round(np.array(xcl).T, decimals=2))
+			print(np.round(np.array(ucl).T, decimals=2))
+			print("===============================================")
 
 			# increment time counter
 			timeStep += 1
@@ -78,10 +78,10 @@ def main():
 		# store mean LMPC time and iteration cost
 		meanTimeCostLMPC.append(np.array([np.sum(timeLMPC)/lmpc.cost, lmpc.cost])) 
 		
-		# Print and store results
-		print "++++++===============================================++++++"
-		print "Completed Iteration: ", itCounter
-		print "++++++===============================================++++++"
+		# print and store results
+		print("++++++===============================================++++++")
+		print("Completed Iteration: ", itCounter)
+		print("++++++===============================================++++++")
 
 		# Save closed-loop, input and stats to .txt files
 		np.savetxt('storedData/closedLoopIteration'+str(itCounter)+'_P_'+str(lmpc.P)+'.txt', np.round(np.array(xcl), decimals=5).T, fmt='%f' )

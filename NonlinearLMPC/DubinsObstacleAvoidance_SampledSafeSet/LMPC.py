@@ -52,9 +52,9 @@ class LMPC(object):
 		self.ftocp.xSol = x[:,0:(self.ftocp.N+1)]
 		self.ftocp.uSol = u[:,0:(self.ftocp.N)]
 		# Print
-		print "Total time added trajectory: ", self.Qfun[-1][0]
-		print "Total time old trajectories: ", [self.Qfun[x][0] for x in range(0, self.it+1)]
-		print "self.oldCost", [self.oldCost]
+		print("Total time added trajectory: ", self.Qfun[-1][0])
+		print("Total time old trajectories: ", [self.Qfun[x][0] for x in range(0, self.it+1)])
+		print("self.oldCost", [self.oldCost])
 		# Update time Improvement counter
 		self.timeImprovement = -1
 		self.it = self.it + 1
@@ -69,7 +69,7 @@ class LMPC(object):
 			else:
 				self.SSindices.append(np.arange(Tj - Tstar + self.ftocp.N, Tj - Tstar + self.ftocp.N+self.P))
 
-		print self.SSindices
+		print(self.SSindices)
 
 
 	def solve(self, xt, verbose = 5):
@@ -179,7 +179,7 @@ class LMPC(object):
 
 		# Check if the cost is not decreasing (it should not happen). If so apply the open-loop from previous time step
 		if  self.oldCost <= self.cost:
-			print "ERROR: The cost is not decreasing"
+			print("ERROR: The cost is not decreasing")
 			pdb.set_trace()
 		
 
@@ -189,13 +189,13 @@ class LMPC(object):
 		self.oldCost = self.cost
 
 		if verbose>0:
-			print "Open Loop Cost:", self.cost, " Time improvement: ",self.timeImprovement
-			print np.round(self.xOpenLoop, decimals=2)
-			print "Tot Cost List:", costList
+			print("Open Loop Cost:", self.cost, " Time improvement: ",self.timeImprovement)
+			print(np.round(self.xOpenLoop, decimals=2))
+			print("Tot Cost List:", costList)
 
-			print "Open Loop: ", self.ut 
-			print np.round(self.xOpenLoop, decimals =2)
-			print np.round(self.uOpenLoop, decimals =2)
+			print("Open Loop: ", self.ut )
+			print(np.round(self.xOpenLoop, decimals =2))
+			print(np.round(self.uOpenLoop, decimals =2))
 
 		# Now update zt and the horizon length (The vector zt is used to construct a feasible solution at time t+1, it is the vector used in the proof)
 		# First check if zt == terminal point, if (zt == terminal point) ---> update zt else update horizon N = N - 1)
@@ -214,7 +214,7 @@ class LMPC(object):
 			# Update zt as the x^*_{t+N|t}
 			self.zt = xflatOpenLoop[n*N:n*(N+1)]
 			if verbose>0:
-				print "Changing horizon to ", self.ftocp.N-1
+				print("Changing horizon to ", self.ftocp.N-1)
 
 			# Change horizon length
 			self.ftocp.N = self.ftocp.N-1
@@ -222,7 +222,7 @@ class LMPC(object):
 			# Swift the optimal solution to construct the new candidate solution at the next time step
 			nVar = (self.ftocp.N+1)*self.ftocp.n + self.ftocp.N*self.ftocp.d
 			self.xGuess = np.zeros(nVar)
- 			self.xGuess[0 : n*N]             = xflatOpenLoop[n:n*(N+1)]
+			self.xGuess[0 : n*N]             = xflatOpenLoop[n:n*(N+1)]
 			self.xGuess[n*N : (n*N+d*(N-1))] = uflatOpenLoop[d:d*N]
 
 
@@ -246,8 +246,8 @@ class LMPC(object):
 
 		currIdxShort = currIdx[ (currIdx >0) & (currIdx < np.shape(self.SS[it])[1])]
 		
-		print "Time indices selected"
-		print currIdxShort
+		print("Time indices selected")
+		print(currIdxShort)
 
 		self.SSindices[it] = self.SSindices[it] + 1
 
