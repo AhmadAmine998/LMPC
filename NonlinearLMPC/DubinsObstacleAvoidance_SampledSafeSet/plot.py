@@ -7,9 +7,9 @@ rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
 rc('text', usetex=True)
 
 
-it = 6
+it = 9
 iterationTime = []
-P = 40
+P = 8
 print("Number of points used: ", P)
 # =========================================================
 # Plot closed-loop
@@ -18,7 +18,7 @@ print("Number of points used: ", P)
 colorMap = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]
 # colorMap = ["#3182bd", "#fd8d3c", "#31a354", "#e6550d", "#756bb1"]
 
-xFeasible = np.loadtxt('storedData/closedLoopFeasible.txt')
+xFeasible = np.loadtxt('storedData/closedLoopFeasible.txt').T
 plt.figure()
 plt.plot(xFeasible[0,:], xFeasible[1,:], '-d', color=colorMap[2], label='Feasible trajectory')
 iterationTime.append(xFeasible.shape[1]-1) # Store time to reach xf
@@ -47,8 +47,8 @@ print(iterationTime)
 x_obs = []
 y_obs = []
 for i in np.linspace(0,2*np.pi,1000):
-	x_obs.append(27 + 8*np.cos(i))
-	y_obs.append(-1 + 6*np.sin(i))
+	x_obs.append(30 + 10*np.cos(i))
+	y_obs.append(0 + 10*np.sin(i))
 
 plt.plot(x_obs, y_obs, '-k', label='Obstacle')
 plt.xlabel('$x$', fontsize=20)
@@ -81,7 +81,7 @@ plt.legend()
 # =========================================================
 # Plot velocity
 # =========================================================
-xFeasible = np.loadtxt('storedData/closedLoopFeasible.txt')
+xFeasible = np.loadtxt('storedData/closedLoopFeasible.txt').T
 plt.figure()
 plt.plot(xFeasible[0,:], xFeasible[2,:], '-d', color=colorMap[2], label='Feasible trajectory')
 
@@ -221,8 +221,8 @@ if input == 'y':
 	x_obs = []
 	y_obs = []
 	for i in np.linspace(0,2*np.pi,1000):
-		x_obs.append(27 + 8*np.cos(i))
-		y_obs.append(-1 + 6*np.sin(i))
+		x_obs.append(30 + 10*np.cos(i))
+		y_obs.append(0 + 10*np.sin(i))
 
 	plt.plot(x_obs, y_obs, '-k', label='Obstacle')
 	plt.xlabel('$x$', fontsize=20)

@@ -71,8 +71,8 @@ class LMPC(object):
 
 		print(self.SSindices)
 
+	def solveConvexHull(self, xt, verbose = 5):
 
-	def solve(self, xt, verbose = 5):
 		# Retrieve variables from ftocp
 		N = self.ftocp.N
 		n = self.ftocp.n
@@ -84,6 +84,61 @@ class LMPC(object):
 		indList   = []
 		xOpenLoop = []
 		uOpenLoop = []
+
+		# Assign the initial feasible solution 
+		self.ftocp.xGuess = self.xGuess
+
+		# Loop over the l iterations used to contruct the local safe set
+		if self.l == 'all':
+			minIt = 0
+		else:
+			minIt = np.max([0, self.it - self.l])
+		
+		Xss = []
+		Qss = []
+		for i in range(minIt, self.it):
+
+			# for iteration l compute the set of indices which are closer to zt
+			if self.P =='all':
+				idx = np.arange(0, self.SS[i].shape[1])
+			elif self.safeSetOption == 'timeVarying':
+				idx = self.timeSS(i, verbose = verbose)
+			else:
+				idx = self.closeToSS(i)
+
+			selectedSS = self.SS[i][:,idx]
+			Qss.append(self.Qfun[i][idx])
+			Xss.append(selectedSS)
+		
+		Qss = np.array(Qss).flatten()
+		Xss = np.hstack(Xss)
+
+		# Initialize the list which will store the solution to the ftocp for the l-th iteration in the safe set
+		costIt  = []
+		inputIt = []
+		xOpenLoopIt = []
+		uOpenLoopIt = []
+
+
+		
+		
+
+
+	def solve(self, xt, verbose = 5):
+		print("Solving LMPC for xt = ", xt)
+		# Retrieve variables from ftocp
+		N = self.ftocp.N
+		n = self.ftocp.n
+		d = self.ftocp.d
+		
+		# Initialize lists which store the solution to the ftocp for different terminal points in the safe set
+		inputList = []
+		costList  = []
+		indList   = []
+		xOpenLoop = []
+		uOpenLoop = []
+		slackList = []
+		slackObsList = []
 
 		# Assign the initial feasible solution 
 		self.ftocp.xGuess = self.xGuess
@@ -109,6 +164,8 @@ class LMPC(object):
 			inputIt = []
 			xOpenLoopIt = []
 			uOpenLoopIt = []
+			slackIt = []
+			slackObsIt = []
 
 			# Now solve the ftocp for each element of the l-th trajectory which is in the local safe set
 			idxToTry = copy.copy(idx)
@@ -120,7 +177,7 @@ class LMPC(object):
 				# solve the ftocp (note that verbose = 1 will print just the open loop trajectory and the output from ipopt)
 				verbose_IPOPT = verbose if verbose > 1 else 0
 				if self.ftocp.N > 1: # if the horizon of the ftocp > 1 ===> solve ftocp
-					if Qf+N < self.oldCost: # check if the cost of the ftocp could be decreasing, otherwise pointless to solve (look LMPC TAC paper the practical implementation section)
+					if Qf+N <= self.oldCost: # check if the cost of the ftocp could be decreasing, otherwise pointless to solve (look LMPC TAC paper the practical implementation section)
 						
 						# Set initial guess and build the problem
 						self.ftocp.xGuess = self.xGuess				
@@ -155,6 +212,19 @@ class LMPC(object):
 
 				xOpenLoopIt.append(copy.copy(self.ftocp.xSol))
 				uOpenLoopIt.append(copy.copy(self.ftocp.uSol))
+
+				xLast = self.ftocp.xSol[:,-1]
+				slack = np.linalg.norm([xLast-xf])
+				slackIt.append(slack)
+
+				distance_to_obs = np.zeros((N-1,1))
+				for k in range(1, N):
+					if np.linalg.norm([self.ftocp.xSol[:,k][0:2] - np.array([30,0])]) < 10:
+						distance_to_obs[k-1] = 10 - np.linalg.norm([self.ftocp.xSol[:,k][0:2] - np.array([30,0])])
+					else:
+						distance_to_obs[k-1] = 0
+						
+				slackObsIt.append(distance_to_obs)
 				
 			# store the solution to the ftocp for the l-th trajectory stored into the local safe set
 			indList.append(copy.copy(idx))
@@ -162,6 +232,8 @@ class LMPC(object):
 			inputList.append(copy.copy(inputIt))
 			xOpenLoop.append(copy.copy(xOpenLoopIt))
 			uOpenLoop.append(copy.copy(uOpenLoopIt))
+			slackList.append(copy.copy(slackIt))
+			slackObsList.append(copy.copy(slackObsIt))
 
 		# Pick the best trajectory among the feasible ones
 		bestItLocSS  = costList.index(min(costList))
@@ -176,11 +248,13 @@ class LMPC(object):
 		self.xOpenLoop = xOpenLoop[bestItLocSS][bestTime]
 		self.uOpenLoop = uOpenLoop[bestItLocSS][bestTime]
 		self.cost      =  costList[bestItLocSS][bestTime]
+		self.slack     = slackList[bestItLocSS][bestTime]
+		self.slackObs  = slackObsList[bestItLocSS][bestTime]
 
 		# Check if the cost is not decreasing (it should not happen). If so apply the open-loop from previous time step
-		if  self.oldCost <= self.cost:
+		if  self.oldCost < self.cost:
 			print("ERROR: The cost is not decreasing")
-			pdb.set_trace()
+			# pdb.set_trace()
 		
 
 		# Store best it and best cost, and update timeImprovement with respect to previous iteration
@@ -188,6 +262,7 @@ class LMPC(object):
 		self.timeImprovement = self.timeImprovement + self.oldCost - self.cost - 1
 		self.oldCost = self.cost
 
+		verbose = 5
 		if verbose>0:
 			print("Open Loop Cost:", self.cost, " Time improvement: ",self.timeImprovement)
 			print(np.round(self.xOpenLoop, decimals=2))
@@ -226,7 +301,7 @@ class LMPC(object):
 			self.xGuess[n*N : (n*N+d*(N-1))] = uflatOpenLoop[d:d*N]
 
 
-	def closeToSS(self, it):
+	def closeToSS_OLD(self, it):
 		x = self.SS[it]
 		u = self.uSS[it]
 
@@ -239,15 +314,39 @@ class LMPC(object):
 		idxMinNorm = np.argsort(norm)
 
 		maxData = np.min([x.shape[1], self.P])
-		return idxMinNorm[0:self.P]
+		idx = idxMinNorm[0:self.P]
+		idx.sort()
+		return idx
 
-	def timeSS(self, it):
+	def closeToSS(self, it):
+		x = self.SS[it]
+		u = self.uSS[it]
+
+		oneVec = np.ones((x.shape[1], 1))
+		ztVec = (np.dot(oneVec, np.array([self.zt]))).T
+		diff = x - ztVec
+
+		norm = la.norm(np.array(diff), 1, axis=0)
+		idxMinNorm = np.argmin(norm)
+
+		# If the idxMinNorm is the last point in the safe set, 
+		# Or idxMinNorm + P is greater than the length of the safe set
+		# Then return the last P points in the safe set
+		toIdx = np.min([idxMinNorm + self.P, x.shape[1]])
+		if toIdx - idxMinNorm < self.P:
+			idxMinNorm = toIdx - self.P
+
+		idx = np.arange(idxMinNorm, toIdx)
+		return idx
+
+	def timeSS(self, it, verbose = 0):
 		currIdx = self.SSindices[it]
 
 		currIdxShort = currIdx[ (currIdx >0) & (currIdx < np.shape(self.SS[it])[1])]
 		
-		print("Time indices selected")
-		print(currIdxShort)
+		if verbose>0:
+			print("Time indices selected")
+			print(currIdxShort)
 
 		self.SSindices[it] = self.SSindices[it] + 1
 
