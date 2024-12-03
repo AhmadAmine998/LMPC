@@ -56,6 +56,34 @@ class FTOCP(object):
 		else:
 			self.feasible = 0
 
+	def solveConvexHull(self, x0, xSS):
+		num_ss = xSS.shape[1]
+
+		# Set box constraints on states, input and slack
+		self.lbx = x0 + [-1000]*(self.n*(self.N)) + [-1.0,-1.0]*self.N + [-1000]*self.n + [1]*(self.N-1) + [0]*num_ss
+		self.ubx = x0 +  [1000]*(self.n*(self.N)) + [ 1.0, 1.0]*self.N +  [1000]*self.n + [100000]*(self.N-1) + [1]*num_ss
+		
+		# Solve nonlinear programm
+		self.xGuessTot = np.concatenate((self.xGuess, np.zeros(self.n+self.N-1)), axis=0)
+		# Add lambda Guess, as 1/N
+		self.xGuessTot = np.concatenate((self.xGuessTot, np.ones(num_ss)/num_ss), axis=0)
+		sol = self.solver(lbx=self.lbx, ubx=self.ubx, lbg=self.lbg_dyanmics, ubg=self.ubg_dyanmics, x0 = self.xGuessTot.tolist())
+		
+
+		# Store optimal solution
+		x = np.array(sol["x"])
+		self.xSol  = x[0:(self.N+1)*self.n].reshape((self.N+1,self.n)).T
+		self.uSol  = x[(self.N+1)*self.n:((self.N+1)*self.n + self.d*self.N)].reshape((self.N,self.d)).T
+		self.slack = x[((self.N+1)*self.n + self.d*self.N):((self.N+1)*self.n + self.d*self.N+self.n)]
+		self.slackObs = x[((self.N+1)*self.n + self.d*self.N+self.n):((self.N+1)*self.n + self.d*self.N+2*self.n-1)]
+		self.lambda_ = x[-num_ss:]
+
+		# Check solution flag
+		if (self.solver.stats()['success']) and (np.linalg.norm(self.slack,2)< 1e-8):
+			self.feasible = 1
+		else:
+			self.feasible = 0
+
 	def buildNonlinearProgramConvexHull(self, N, Xss, Qss):
 		# Define variables
 		self.N = N
@@ -84,8 +112,7 @@ class FTOCP(object):
 		# Add safe set constraint with lambda @ Xss = Xf, lambda >= 0, sum(lambda) = 1
 		lambda_ = SX.sym('lambda', Xss.shape[1])
 		constraint = vertcat(constraint, Xss @ lambda_ - X[n*N:n*(N+1)])
-		constraint = vertcat(constraint, lambda_ >= 0)
-		constraint = vertcat(constraint, sum1(lambda_) == 1)
+		constraint = vertcat(constraint, sum1(lambda_) - 1)
 
 		# Defining Cost
 		cost = 1000*(slack[0]**2 + slack[1]**2 + slack[2]**2)
@@ -101,12 +128,12 @@ class FTOCP(object):
 		# opts = {"verbose":False,"ipopt.print_level":0,"print_time":0}#, "ipopt.acceptable_constr_viol_tol":0.001}#,"ipopt.acceptable_tol":1e-4}#, "expand":True}
 		# opts = {"verbose":False,"ipopt.print_level":0,"print_time":0,"ipopt.mu_strategy":"adaptive"}#, "ipopt.acceptable_constr_viol_tol":0.001}#,"ipopt.acceptable_tol":1e-4}#, "expand":True}
 		opts = {"verbose":False,"ipopt.print_level":0,"print_time":0,"ipopt.mu_strategy":"adaptive","ipopt.mu_init":1e-5,"ipopt.mu_min":1e-15,"ipopt.barrier_tol_factor":1}#, "ipopt.acceptable_constr_viol_tol":0.001}#,"ipopt.acceptable_tol":1e-4}#, "expand":True}
-		nlp = {'x':vertcat(X,U,slack, slackObs), 'f':cost, 'g':constraint}
+		nlp = {'x':vertcat(X,U,slack, slackObs, lambda_), 'f':cost, 'g':constraint}
 		self.solver = nlpsol('solver', 'ipopt', nlp, opts)
 
 		# Set lower bound of inequality constraint to zero to force: 1) n initial constraint, 2) n*N state dynamics and 3) n terminal contraints
-		self.lbg_dyanmics = [0]*(n*N) + [0*1.0]*(N-1) + [0]*n
-		self.ubg_dyanmics = [0]*(n*N) + [0*100000000]*(N-1)+ [0]*n
+		self.lbg_dyanmics = [0]*(n*N) + [0*1.0]*(N-1) + [0]*n + [0]
+		self.ubg_dyanmics = [0]*(n*N) + [0*100000000]*(N-1)+ [0]*n + [0]
 
 
 	def buildNonlinearProgram(self, N, xf):

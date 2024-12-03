@@ -16,7 +16,7 @@ class LMPC(object):
 			- solve: uses ftocp and the stored data to comptute the predicted trajectory
 			- closeToSS: computes the K-nearest neighbors to zt"""
 
-	def __init__(self, ftocp, l, P, safeSetOption = []):
+	def __init__(self, ftocp, l, P, xGoal, safeSetOption = []):
 		self.ftocp = ftocp
 		self.SS    = []
 		self.uSS   = []
@@ -28,6 +28,7 @@ class LMPC(object):
 		self.safeSetOption = safeSetOption # Tima varying safe set described in new Nonlinear LMPC paper
 		self.itCost = []
 		self.N = ftocp.N
+		self.xGoal = xGoal
 
 	def addTrajectory(self, x, u):
 		# Add the feasible trajectory x and the associated input sequence u to the safe set
@@ -85,9 +86,6 @@ class LMPC(object):
 		xOpenLoop = []
 		uOpenLoop = []
 
-		# Assign the initial feasible solution 
-		self.ftocp.xGuess = self.xGuess
-
 		# Loop over the l iterations used to contruct the local safe set
 		if self.l == 'all':
 			minIt = 0
@@ -119,9 +117,55 @@ class LMPC(object):
 		xOpenLoopIt = []
 		uOpenLoopIt = []
 
+		# Set initial guess and build the problem
+		self.ftocp.xGuess = self.xGuess				
+		self.ftocp.buildNonlinearProgramConvexHull(N, Xss, Qss)
 
+		# Solve FTOCP which drive the system from xt to xf
+		self.ftocp.solveConvexHull(xt, Xss)
+
+		# Check for feasibility and store the solution
+		Qf = self.ftocp.lambda_.T @ Qss
+
+		# Store the cost and solution associated with xf. From these solution we will pick and apply the best one
+		cost = Qf + N if self.ftocp.feasible else float('Inf')
+
+		# Extract optimal input, open loop and cost 
+		self.ut        = self.ftocp.uSol[:,0]
+		self.xOpenLoop = self.ftocp.xSol
+		self.uOpenLoop = self.ftocp.uSol
+		self.cost      = cost
+		self.slack     = self.ftocp.slack
+		self.slackObs  = self.ftocp.slackObs
+
+		# Check if the cost is not decreasing (it should not happen). If so apply the open-loop from previous time step
+		if  self.oldCost < self.cost:
+			print("ERROR: The cost is not decreasing")
+			# pdb.set_trace()
 		
 		
+		if verbose>0:
+			print("Open Loop Cost:", self.cost, " Time improvement: ",self.timeImprovement)
+			print(np.round(self.xOpenLoop, decimals=2))
+			print("Tot Cost List:", costList)
+
+			print("Open Loop: ", self.ut )
+			print(np.round(self.xOpenLoop, decimals =2))
+			print(np.round(self.uOpenLoop, decimals =2))
+
+		# Now update zt and the horizon length (The vector zt is used to construct a feasible solution at time t+1, it is the vector used in the proof)
+		# First check if zt == terminal point, if (zt == terminal point) ---> update zt else update horizon N = N - 1)
+		xflatOpenLoop  = self.xOpenLoop[:,0:(self.ftocp.N+1)].T.flatten() # change format
+		uflatOpenLoop  = self.uOpenLoop[:,0:(self.ftocp.N)].T.flatten()
+		
+		# Update zt as the x^*_{t+N|t}
+		self.zt = xflatOpenLoop[n*N:n*(N+1)]
+
+		# Swift the optimal solution to construct the new candidate solution at the next time step
+		self.xGuess[0 : n*N]       = xflatOpenLoop[n:n*(N+1)]
+		self.xGuess[n*N : n*(N+1)] = self.zt
+		self.xGuess[n*(N+1) : (n*(N+1)+d*(N-1))]     = uflatOpenLoop[d:d*N]
+		self.xGuess[(n*(N+1)+d*(N-1)):(n*(N+1)+d*N)] = self.uOpenLoop[:,0]
 
 
 	def solve(self, xt, verbose = 5):

@@ -379,8 +379,8 @@ class LMPCTask(QtCore.QThread):
                     'min_laptime', 'min_states', 'time_record')   
         self.rec.min_laptime = np.inf
 
-        self.l = 4
-        self.P = 40
+        self.l = 20
+        self.P = 24
         self.exp_name = f'lmpc_P{self.P}_l{self.l}_N{self.ftocp.N}_safeSetOption{self.safeSetOption}'
         self.save_dir = 'storedData/' + self.exp_name + '/'
         self.log = Logger(self.save_dir, self.exp_name, create_file=True)
@@ -405,11 +405,11 @@ class LMPCTask(QtCore.QThread):
             while np.linalg.norm(xcl[-1][:2] - self.xclFeasible[:2, -1]) >= 0.1:
                 xt = xcl[timeStep]
                 startTimer = datetime.datetime.now()
-                lmpc.solve(xt, verbose=0)
+                lmpc.solveConvexHull(xt, verbose=0)
                 deltaTimer = datetime.datetime.now() - startTimer
                 timeLMPC.append(deltaTimer.total_seconds())
-                if self.plot:
-                    input("Press Enter to continue...")
+                # if self.plot:
+                #     input("Press Enter to continue...")
 
                 ut = lmpc.ut
                 ucl.append(copy.copy(ut))
