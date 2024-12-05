@@ -14,6 +14,7 @@ from matplotlib.gridspec import GridSpec
 
 curr_pos = []
 curr_opt_traj = None
+curr_safe_set = None
 
 class Plottings:
     def __init__(self, feasible_traj, rec, save_dir, enable=True):
@@ -379,7 +380,7 @@ class LMPCTask(QtCore.QThread):
                     'min_laptime', 'min_states', 'time_record')   
         self.rec.min_laptime = np.inf
 
-        self.l = 20
+        self.l = 4
         self.P = 24
         self.exp_name = f'lmpc_P{self.P}_l{self.l}_N{self.ftocp.N}_safeSetOption{self.safeSetOption}'
         self.save_dir = 'storedData/' + self.exp_name + '/'
@@ -393,6 +394,7 @@ class LMPCTask(QtCore.QThread):
 
         global curr_pos
         global curr_opt_traj
+        global curr_safe_set
         meanTimeCostLMPC = []
         for itCounter in tqdm(range(1, self.itMax + 1), desc="LMPC Iterations"):
             timeStep = 0
@@ -417,6 +419,7 @@ class LMPCTask(QtCore.QThread):
                 if self.plot:
                     curr_pos.append(xcl[-1][:2])
                     curr_opt_traj = lmpc.xOpenLoop.copy()
+                    curr_safe_set = lmpc.Xss.copy()
                     self.update_signal.emit()  # Notify UI to update
 
                 timeStep += 1
@@ -456,7 +459,7 @@ class LMPCTask(QtCore.QThread):
             self.rec.boundary_average_record.append(np.mean(self.rec.boundary_violation_record))
             self.rec.boundary_max_record.append(np.max(self.rec.boundary_violation_record))
             self.rec.control_records.append(np.asarray(self.rec.control_record))
-            self.rec.mean_vels.append(np.mean(np.linalg.norm(self.rec.xy_states[:, 2:4])))
+            self.rec.mean_vels.append(np.mean(np.linalg.norm(self.rec.xy_states[:, 2:4], axis=1)))
             if laptime < self.rec.min_laptime:
                 self.rec.min_laptime = laptime
                 self.rec.min_states = self.rec.xy_states
@@ -483,7 +486,6 @@ class LMPCTask(QtCore.QThread):
             np.savetxt('storedData/inputIteration'+str(itCounter)+'_P_'+str(lmpc.P)+'.txt', np.round(np.array(ucl), decimals=5).T, fmt='%f' )
             np.savetxt('storedData/meanTimeLMPC_P_'+str(lmpc.P)+'.txt', np.array(meanTimeCostLMPC), fmt='%f' )
                 
-            laptime = 0.0
             self.rec.init('laptimes', # record per action laptime,
                         'control_record', 
                         'cross_flags',
@@ -495,16 +497,19 @@ class LMPCTask(QtCore.QThread):
                         'boundary_violation_record',
                         'lamb_record')
 
+            plottings.plot_trajectory('', laptime)
+            plottings.plot_trajectory_history(itCounter, laptime)
+            plottings.plot_laptime_speed('', laptime)
+            plottings.plot_ss_violation('', laptime)
+            plottings.plot_boundary_violation('', laptime)
+            plottings.plot_speed_position('', laptime)
+            plottings.plot_speed_position_history(itCounter, laptime)
+            plottings.plot_acceleration_position('', laptime) 
+            plottings.plot_acceleration_position_history(itCounter, laptime)
+
+            # RESET AFTER PLOTTING IDIOT
+            laptime = 0.0
         print('max lap reached')
-        plottings.plot_trajectory('', laptime)
-        plottings.plot_trajectory_history(itCounter, laptime)
-        plottings.plot_laptime_speed('', laptime)
-        plottings.plot_ss_violation('', laptime)
-        plottings.plot_boundary_violation('', laptime)
-        plottings.plot_speed_position('', laptime)
-        plottings.plot_speed_position_history(itCounter, laptime)
-        plottings.plot_acceleration_position('', laptime) 
-        plottings.plot_acceleration_position_history(itCounter, laptime)
         return end_action(self.rec, self.save_dir, plottings)
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -563,11 +568,20 @@ class MainWindow(QtWidgets.QMainWindow):
 			name="Optimal Trajectory",
 		)
 
+        # Plot the chosen safe set
+        self.safe_set_plot = self.canvas.plot(
+            [0], [0],
+            pen=pg.mkPen(color=(255, 0, 255), width=2),
+            name="Safe Set",
+        )
+
         # Add legend
         self.legend = self.canvas.addLegend()
         self.legend.addItem(self.waypoints_plot, "Initial Feasible Trajectory")
         self.legend.addItem(self.obs_plot, "Obstacle")
         self.legend.addItem(self.current_location_plot, "Current Position")
+        self.legend.addItem(self.optimal_trajectory_plot, "Optimal Trajectory")
+        self.legend.addItem(self.safe_set_plot, "Safe Set")
 
         # Timer to update current position
         self.timer = QtCore.QTimer()
@@ -579,6 +593,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.current_location_plot.setData(np.array(curr_pos))
         if curr_opt_traj is not None:
             self.optimal_trajectory_plot.setData(curr_opt_traj[0, :], curr_opt_traj[1, :])
+        if curr_safe_set is not None:
+            self.safe_set_plot.setData(curr_safe_set[0, :], curr_safe_set[1, :])
             
 
 
@@ -588,7 +604,7 @@ def main():
 
     plot = True
     N = 10
-    dt = 0.5
+    dt = 0.2
     x0 = [0, 0, 0, 0]
     itMax = 20
     
@@ -629,7 +645,7 @@ def feasTraj(ftocp):
                   [1, 0],
                   [0, 1]])
     ss = ct.ss(A, B, np.eye(4), np.zeros((4, 2)))
-    ss = ct.c2d(ss, 0.5)
+    ss = ct.c2d(ss, ftocp.dt)
 
     Q = np.diag([0.1, 0.1, 10, 10])
     R = 100 * np.eye(2)

@@ -16,7 +16,7 @@ class LMPC(object):
 			- solve: uses ftocp and the stored data to comptute the predicted trajectory
 			- closeToSS: computes the K-nearest neighbors to zt"""
 
-	def __init__(self, ftocp, l, P, xGoal, safeSetOption = []):
+	def __init__(self, ftocp, l, P, safeSetOption = []):
 		self.ftocp = ftocp
 		self.SS    = []
 		self.uSS   = []
@@ -28,7 +28,6 @@ class LMPC(object):
 		self.safeSetOption = safeSetOption # Tima varying safe set described in new Nonlinear LMPC paper
 		self.itCost = []
 		self.N = ftocp.N
-		self.xGoal = xGoal
 
 	def addTrajectory(self, x, u):
 		# Add the feasible trajectory x and the associated input sequence u to the safe set
@@ -108,8 +107,8 @@ class LMPC(object):
 			Qss.append(self.Qfun[i][idx])
 			Xss.append(selectedSS)
 		
-		Qss = np.array(Qss).flatten()
-		Xss = np.hstack(Xss)
+		self.Qss = np.array(Qss).flatten()
+		self.Xss = np.hstack(Xss)
 
 		# Initialize the list which will store the solution to the ftocp for the l-th iteration in the safe set
 		costIt  = []
@@ -119,13 +118,13 @@ class LMPC(object):
 
 		# Set initial guess and build the problem
 		self.ftocp.xGuess = self.xGuess				
-		self.ftocp.buildNonlinearProgramConvexHull(N, Xss, Qss)
+		self.ftocp.buildNonlinearProgramConvexHull(N, self.Xss, self.Qss)
 
 		# Solve FTOCP which drive the system from xt to xf
-		self.ftocp.solveConvexHull(xt, Xss)
+		self.ftocp.solveConvexHull(xt, self.Xss)
 
 		# Check for feasibility and store the solution
-		Qf = self.ftocp.lambda_.T @ Qss
+		Qf = self.ftocp.lambda_.T @ self.Qss
 
 		# Store the cost and solution associated with xf. From these solution we will pick and apply the best one
 		cost = Qf + N if self.ftocp.feasible else float('Inf')
@@ -167,6 +166,15 @@ class LMPC(object):
 		self.xGuess[n*(N+1) : (n*(N+1)+d*(N-1))]     = uflatOpenLoop[d:d*N]
 		self.xGuess[(n*(N+1)+d*(N-1)):(n*(N+1)+d*N)] = self.uOpenLoop[:,0]
 
+		
+		distance_to_obs = np.zeros((N-1,1))
+		for k in range(1, N):
+			if np.linalg.norm([self.ftocp.xSol[:,k][0:2] - np.array([30,0])]) < 10:
+				distance_to_obs[k-1] = 10 - np.linalg.norm([self.ftocp.xSol[:,k][0:2] - np.array([30,0])])
+			else:
+				distance_to_obs[k-1] = 0
+				
+		self.slackObs = distance_to_obs
 
 	def solve(self, xt, verbose = 5):
 		print("Solving LMPC for xt = ", xt)
